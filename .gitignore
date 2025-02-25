@@ -1,0 +1,6 @@
+/files/*
+t1*
+t2*
+
+.idea
+.env
