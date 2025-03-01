@@ -27,45 +27,44 @@ headers = {
 }
 
 
-def extract_questions_answers(html_text , title ):
+def extract_questions_answers(html_text):
     if not html_text:
-        return []
+        return []  # Return an empty list if no text is provided
 
     decoded_html = html.unescape(html_text)
     soup = BeautifulSoup(decoded_html, "html.parser")
 
     elements = soup.find_all(class_=["matn", "answer"])
 
-    questions = []
-    answers = []
-
+    qa_pairs = []
     current_question = None
+    current_answers = []
 
     for elem in elements:
         text = elem.get_text(strip=True)
-        if text:  # Check if text exists
-            if 'matn' in elem.get('class', []):  # Check if it is a question
+        if text:
+            if 'matn' in elem.get('class', []):  # If it's a question
+                # If there was a previous question with answers, save it
+                if current_question and current_answers:
+                    qa_pairs.append({"question": current_question, "answer": " | ".join(current_answers)})
+
+                # Start a new question
                 current_question = text
-            elif 'answer' in elem.get('class', []):  # Check if it is an answer
-                if current_question:
-                    questions.append(current_question)  # Append the question
-                    answers.append(text)  # Append the answer
-                    current_question = None  # Reset after pairing the question with its answer
+                current_answers = []  # Reset answers list
 
-    # Check if the lengths of questions and answers match
-    if len(questions) != len(answers):
-        print("Warning: " , title)
+            elif 'answer' in elem.get('class', []):  # If it's an answer
+                if current_question:  # Only collect answers if there's an active question
+                    current_answers.append(text)
 
-    # Pair them together, ensuring all questions have answers
-    qa_pairs = [{"question": q, "answer": a} for q, a in zip_longest(questions, answers, fillvalue="No answer provided")]
+    # Add the last valid question-answer pair if it has answers
+    if current_question and current_answers:
+        qa_pairs.append({"question": current_question, "answer": " | ".join(current_answers)})
 
     return qa_pairs
 
-
 # Note: parentTitle could be None, then title will be the prime
 def formatContent(parentTitle, title, question, answer):
-    q = f"- رساله خامنه ای {parentTitle + '/' if parentTitle is not None else ''}{title} - {question}"
-    return {'question': q, 'answer': answer}
+    return {'question': question, 'answer': answer , 'category' : parentTitle + " " + title if parentTitle is not None else title}
 
 
 session = requests.Session()
@@ -100,7 +99,7 @@ for cat in categories:
             parent2 = item['parent']
             title2 = item['title']
 
-            qaList = extract_questions_answers(content2 , title2 )
+            qaList = extract_questions_answers(content2  )
             for qa in qaList:
                 questions.append(
                     formatContent(title, title2, qa['question'], qa['answer'])
@@ -108,11 +107,11 @@ for cat in categories:
 
 
     else:
-        qaList = extract_questions_answers(content , title)
+        qaList = extract_questions_answers(content )
         for qa in qaList:
             questions.append(formatContent(None, title, qa['question'], qa['answer']))
 
 
-with open("questions.jsonl", "w", encoding="utf-8") as f:
+with open("files/questions.jsonl", "w", encoding="utf-8") as f:
     for q in questions:
         f.write(json.dumps(q, ensure_ascii=False) + "\n")
