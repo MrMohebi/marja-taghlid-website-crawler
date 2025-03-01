@@ -38,11 +38,11 @@ with open(OUTPUT_PATH, 'w', encoding='utf8') as output_file:
         result = json.loads(json_str)
         for addon in APPENDS:
             c = dict(template)
-            c['messages'][1]['content'] = addon + " " + result['input']
-            c['messages'][2]['content'] = addon + " " + result['output']
+            c['messages'][1]['content'] = addon + " " + result['question']
+            c['messages'][2]['content'] = addon + " " + result['answer']
             json.dump(c, output_file, ensure_ascii=False)
             output_file.write('\n')
             count += 1
-        if count >= limit:
-            break
+        # if count >= limit:
+        #     break
 
