@@ -1,5 +1,8 @@
 import requests
 import json
+from bs4 import BeautifulSoup
+from itertools import zip_longest
+import html
 
 url = "https://formx.khamenei.link/treatise/action/get-data"
 
@@ -23,28 +26,38 @@ headers = {
     "Accept": "*/*"
 }
 
-from bs4 import BeautifulSoup
-from itertools import zip_longest
-import html
 
-
-def extract_questions_answers(html_text):
+def extract_questions_answers(html_text , title ):
     if not html_text:
         return []
 
     decoded_html = html.unescape(html_text)
-    soup = BeautifulSoup(decoded_html, "html5lib")
+    soup = BeautifulSoup(decoded_html, "html.parser")
 
     elements = soup.find_all(class_=["matn", "answer"])
 
-    texts = [elem.get_text(strip=True) for elem in elements if elem.get_text(strip=True)]
+    questions = []
+    answers = []
 
-    qs, ans = texts[::2], texts[1::2]  # Odd-indexed for questions, even-indexed for answers
+    current_question = None
 
-    print(len(qs), len(ans))
+    for elem in elements:
+        text = elem.get_text(strip=True)
+        if text:  # Check if text exists
+            if 'matn' in elem.get('class', []):  # Check if it is a question
+                current_question = text
+            elif 'answer' in elem.get('class', []):  # Check if it is an answer
+                if current_question:
+                    questions.append(current_question)  # Append the question
+                    answers.append(text)  # Append the answer
+                    current_question = None  # Reset after pairing the question with its answer
+
+    # Check if the lengths of questions and answers match
+    if len(questions) != len(answers):
+        print("Warning: " , title)
 
     # Pair them together, ensuring all questions have answers
-    qa_pairs = [{"question": q, "answer": a} for q, a in zip_longest(qs, ans, fillvalue="No answer provided")]
+    qa_pairs = [{"question": q, "answer": a} for q, a in zip_longest(questions, answers, fillvalue="No answer provided")]
 
     return qa_pairs
 
@@ -52,7 +65,7 @@ def extract_questions_answers(html_text):
 # Note: parentTitle could be None, then title will be the prime
 def formatContent(parentTitle, title, question, answer):
     q = f"- رساله خامنه ای {parentTitle + '/' if parentTitle is not None else ''}{title} - {question}"
-    return {'question': q, answer: 'answer'}
+    return {'question': q, 'answer': answer}
 
 
 session = requests.Session()
@@ -86,9 +99,8 @@ for cat in categories:
             id2 = item['id']
             parent2 = item['parent']
             title2 = item['title']
-            print(title2)
 
-            qaList = extract_questions_answers(content2)
+            qaList = extract_questions_answers(content2 , title2 )
             for qa in qaList:
                 questions.append(
                     formatContent(title, title2, qa['question'], qa['answer'])
@@ -96,11 +108,10 @@ for cat in categories:
 
 
     else:
-        qaList = extract_questions_answers(content)
+        qaList = extract_questions_answers(content , title)
         for qa in qaList:
             questions.append(formatContent(None, title, qa['question'], qa['answer']))
 
-print(questions)
 
 with open("questions.jsonl", "w", encoding="utf-8") as f:
     for q in questions:
